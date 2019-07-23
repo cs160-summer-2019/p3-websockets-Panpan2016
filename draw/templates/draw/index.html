@@ -11,6 +11,10 @@
     <script type="text/javascript" src="{% static 'draw/vendor/paper/paper-full.min.js' %}"></script>
 
     <style type="text/css">
+      #myCanvas {
+        margin-left: 10px;
+        border: 5px solid black;
+      }
     </style>
 
 </head>
@@ -21,48 +25,83 @@
 <script>
 
     // setting up the canvas and one paper tool
-    var socket = new WebSocket('wss://p3-websockets-panpan2016-panpanxu714595.codeanyapp.com/ws/draw');
     var canvas = document.getElementById('myCanvas');
     paper.setup(canvas);
     var tool = new paper.Tool();
-    var path = new paper.Path();
-    var randomID = Math.random()*3;
-    var currentID = Math.trunc(randomID);
- 
-    tool.onMouseMove = function (event) {
-      console.log(currentID);
-      var point = {"x": event.point.x,
-                   "y": event.point.y,
-                   "currentID": currentID};
-      socket.send(JSON.stringify(point));
-    }
+  
     
     // getting the URL (you may want to use for Exercise 3)
     var url = window.location.href;
+    var socket = new WebSocket('wss://p3-websockets-panpan2016-panpanxu714595.codeanyapp.com/ws/draw');
+ 
+    var randomID = Math.random();
+    
+    function getColor() {
+      var R = Math.floor(Math.random()* 255);
+      var G = Math.floor(Math.random()* 255);
+      var B = Math.floor(Math.random()* 255);
+      return 'rgb('+ R + "," + G + "," + B + ')';
+    }
+  
+    var path = new paper.Path();
+    var pathColor = getColor();
+    path.strokeColor = pathColor;
+    
+    var anotherPath = {
+      userID: path
+    }
+    
+    
+    if (url.indexOf("small") > -1) {
+      socket.onmessage = function(receivedMessage) {
+        return;
+      };
+     
+      window.addEventListener('deviceorientation', (event) => {
+        var action = event.gamma;
+        if (Math.abs(action) > 42) {
+          path.strokeColor = getColor();
+        }
+      });
+      window.addEventListener('devicemotion', (event) => {
+        var xDirection = event.acceleration.x;
+        var yDirection = event.acceleration.y;
+        var zDirection = event.acceleration.z;
+        if (Math.abs(xDirection) > 10 || Math.abs(yDirection) > 10 || Math.abs(zDirection) > 10) {
+          paper.project.clear();
+        }
+      });
+    
+    } else {
+      socket.onmessage = function(receivedMessage) {
+        var msg = receivedMessage.data;
+        var data = JSON.parse(msg);
+        if(data.id in anotherPath) {
+          anotherPath[data.id].add(new paper.Point(data.x, data.y));
+        } else {
+          anotherPath[data.id] = new paper.Path();
+          anotherPath[data.id].strokeColor = data.userColor;
+          anotherPath[data.id].add(new paper.Point(data.x, data.y));
+        }
+      }
+    }
+ 
+    tool.onMouseMove = function (event) {
+      var point = {x: event.point.x,
+                   y: event.point.y,
+                   userColor: pathColor,
+                   id: randomID};
+      socket.send(JSON.stringify(point));
+      path.add(event.point);
+    }
+    
+    
 
     // var socket = new WebSocket(
     //     'wss://<your url here>/ws/draw');
   
     // create a new websocket connecting to the server
    
-
-    // triggered when receiving a message from the server
-    socket.onmessage = function(receivedMessage) {
-	  // do something when you receive a message
-      var msg = JSON.parse(receivedMessage.data);
-      var point = new paper.Point(msg.x, msg.y);
-      var num = msg.currentID;
-      console.log(num);
-      if (num == 0) {
-         path.strokeColor = '#000000';  
-       } else if (num == 1) {
-         path.strokeColor = '#00ffff';  
-       } else {
-         path.strokeColor = '#008000';  
-       }
-      path.add(point); 
-    };
-
     // use when sending a message to the server
     // to be broadcasted to all clients, please add a delay
     //setTimeout(function() { socket.send('I love rutabagas!'); }, 2000);
